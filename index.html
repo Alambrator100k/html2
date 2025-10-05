@@ -1,0 +1,161 @@
+<!doctype html>
+
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>محرر HTML مباشر</title>
+  <style>
+    :root{--bg:#0f1724;--panel:#0b1220;--muted:#94a3b8;--accent:#06b6d4}
+    html,body{height:100%;margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,'Noto Sans Arabic',sans-serif;background:var(--bg);color:#e6eef6}
+    .app{display:flex;height:100vh;gap:8px;padding:10px;box-sizing:border-box;position:relative;overflow:hidden}
+    .left{width:55%;display:flex;flex-direction:column;gap:8px}
+    .right{flex:1;display:flex;flex-direction:column;gap:8px}
+    .toolbar{display:flex;gap:8px;align-items:center}
+    button{background:transparent;border:1px solid rgba(255,255,255,0.06);padding:8px 12px;border-radius:8px;color:inherit;cursor:pointer;transition:all .2s}
+    button.primary{background:var(--accent);color:#042028;border:none}
+    button:hover{opacity:.85;transform:translateY(-1px)}
+    .editor-wrap{flex:1;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
+    #editor{height:100%;width:100%}
+    .preview{flex:1;display:flex;flex-direction:column;border-radius:8px;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
+    iframe{flex:1;border:0}
+    .bottom{height:140px;background:var(--panel);border-radius:8px;padding:8px;display:flex;flex-direction:column}
+    .console{flex:1;overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:transparent;padding:6px;border-radius:6px}
+    .console .line{padding:2px 4px;border-radius:4px}
+    .line.error{color:#ffb4b4}
+    .line.info{color:#c7f9ff}
+    label.small{color:var(--muted);font-size:13px}
+    input[type=file]{display:none}
+    .controls{display:flex;gap:6px;align-items:center;margin-left:auto}
+    select{background:transparent;padding:6px;border-radius:6px;border:1px solid rgba(255,255,255,0.04);color:inherit}
+    @media (max-width:900px){.app{flex-direction:column}.left{width:100%;height:50vh}.right{height:50vh}}/* طبقة العرض الثلاثي الأبعاد */
+.overlay3d{position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:50;opacity:0;pointer-events:none;transition:opacity .3s}
+.overlay3d.active{opacity:1;pointer-events:auto}
+.frame3d{width:90%;height:90%;background:var(--panel);border-radius:20px;box-shadow:0 0 40px rgba(0,0,0,0.6);transform:perspective(1000px) rotateX(5deg);overflow:hidden;display:flex;flex-direction:column}
+.frame3d header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05)}
+.frame3d iframe{flex:1;border:0}
+
+  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.12.3/ace.js"></script>
+</head>
+<body dir="rtl">
+  <div class="app">
+    <div class="left">
+      <div class="toolbar">
+        <button id="newBtn">جديد</button>
+        <button id="openBtn">فتح</button>
+        <input id="fileInput" type="file" accept=".html,text/html,.htm,text/plain">
+        <button id="saveBtn">حفظ (.html)</button>
+        <button id="runBtn" class="primary">تشغيل (Ctrl+Enter)</button>
+        <label class="small" style="margin-right:8px">تشغيل آلي</label>
+        <input id="autorun" type="checkbox">
+        <div class="controls">
+          <label class="small">ثيم</label>
+          <select id="themeSelect">
+            <option value="ace/theme/twilight">Twilight</option>
+            <option value="ace/theme/monokai">Monokai</option>
+            <option value="ace/theme/textmate">Textmate</option>
+            <option value="ace/theme/chrome">Chrome</option>
+          </select>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <div id="editor">&lt;!-- ابدأ بكتابة HTML هنا --&gt;</div>
+      </div>
+    </div><div class="right">
+  <div class="preview">
+    <div style="display:flex;align-items:center;gap:8px;padding:8px;border-bottom:1px solid rgba(255,255,255,0.02)">
+      <strong>المعاينة الحية</strong>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <label class="small">طريقة العرض:</label>
+        <select id="viewMode">
+          <option value="tab">صفحة داخلية (3D)</option>
+          <option value="popup">نافذة منبثقة (Popup 3D)</option>
+        </select>
+        <button id="openView">عرض</button>
+        <button id="resetBtn">إعادة ضبط</button>
+      </div>
+    </div>
+    <iframe id="previewFrame" sandbox="allow-scripts allow-forms"></iframe>
+  </div>
+
+  <div class="bottom">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <strong>الكونسول</strong>
+      <label class="small" style="margin-right:auto">عرض رسائل console.log و errors</label>
+      <button id="clearConsole">مسح</button>
+    </div>
+    <div id="console" class="console"></div>
+  </div>
+</div>
+
+<!-- overlay ثلاثي الأبعاد -->
+<div class="overlay3d" id="overlay3d">
+  <div class="frame3d">
+    <header>
+      <span>صفحة داخلية (3D)</span>
+      <button id="backBtn">🔙 رجوع</button>
+    </header>
+    <iframe id="innerFrame" sandbox="allow-scripts allow-forms"></iframe>
+  </div>
+</div>
+
+  </div>  <script>
+    const editor = ace.edit('editor');
+    editor.session.setMode('ace/mode/html');
+    editor.setTheme('ace/theme/twilight');
+
+    const previewFrame=document.getElementById('previewFrame');
+    const overlay3d=document.getElementById('overlay3d');
+    const innerFrame=document.getElementById('innerFrame');
+    const runBtn=document.getElementById('runBtn');
+    const openView=document.getElementById('openView');
+    const backBtn=document.getElementById('backBtn');
+    const consoleEl=document.getElementById('console');
+
+    function appendConsole(msg,type='info'){
+      const line=document.createElement('div');
+      line.className='line '+type;
+      line.textContent=msg;
+      consoleEl.appendChild(line);
+      consoleEl.scrollTop=consoleEl.scrollHeight;
+    }
+
+    function makePreviewSrcdoc(code){
+      const intercept=`<script>(function(){\nconst send=(t,...a)=>parent.postMessage({__from:'preview-console',t,a:a.map(x=>String(x))},'*');\n['log','error','warn'].forEach(fn=>{const o=console[fn];console[fn]=(...a)=>{send(fn,...a);o.apply(console,a);}});window.addEventListener('error',e=>send('error',e.message));})();<\\/script>`;
+      return `<!doctype html><html><head><meta charset='utf-8'><base target='_blank'></head><body>${code}${intercept}</body></html>`;
+    }
+
+    function run(){
+      previewFrame.srcdoc=makePreviewSrcdoc(editor.getValue());
+      appendConsole('تم تشغيل الكود.');
+    }
+
+    runBtn.onclick=run;
+
+    openView.onclick=()=>{
+      const mode=document.getElementById('viewMode').value;
+      const code=makePreviewSrcdoc(editor.getValue());
+      if(mode==='popup'){
+        const pop=document.createElement('div');
+        pop.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,0.6);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;z-index:9999;';
+        pop.innerHTML=`<div style="width:90%;height:90%;background:var(--panel);border-radius:20px;box-shadow:0 0 40px rgba(0,0,0,0.6);transform:perspective(1000px) rotateX(5deg);overflow:hidden;display:flex;flex-direction:column;">\n<header style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.05)"><span>نافذة منبثقة (3D)</span><button id='closePopup'>🔙 رجوع</button></header>\n<iframe style='flex:1;border:0' sandbox='allow-scripts allow-forms' srcdoc="${code.replace(/"/g,'&quot;')}"></iframe></div>`;
+        document.body.appendChild(pop);
+        pop.querySelector('#closePopup').onclick=()=>pop.remove();
+      }else{
+        overlay3d.classList.add('active');
+        innerFrame.srcdoc=code;
+      }
+    };
+
+    backBtn.onclick=()=>overlay3d.classList.remove('active');
+
+    window.addEventListener('message',e=>{
+      if(e.data&&e.data.__from==='preview-console'){
+        appendConsole(e.data.a.join(' '),e.data.t==='error'?'error':'info');
+      }
+    });
+
+    run();
+  </script></body>
+</html>
